@@ -7,7 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
-import { Bot, User, Send, Loader2, FileText, Lightbulb, StickyNote, Clock } from 'lucide-react'
+import { Bot, User, Send, Loader2, FileText, Lightbulb, StickyNote, Clock, Save } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -21,6 +21,7 @@ import { SessionManager } from '@/components/source/SessionManager'
 import { MessageActions } from '@/components/source/MessageActions'
 import { convertReferencesToCompactMarkdown, createCompactReferenceLinkComponent } from '@/lib/utils/source-references'
 import { useModalManager } from '@/lib/hooks/use-modal-manager'
+import { useCreateNote } from '@/lib/hooks/use-notes'
 import { toast } from 'sonner'
 import { useTranslation } from '@/lib/hooks/use-translation'
 
@@ -82,6 +83,7 @@ export function ChatPanel({
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { openModal } = useModalManager()
+  const createNote = useCreateNote()
 
   const handleReferenceClick = (type: string, id: string) => {
     const modalType = type === 'source_insight' ? 'insight' : type as 'source' | 'note' | 'insight'
@@ -123,6 +125,32 @@ export function ChatPanel({
   const isMac = typeof navigator !== 'undefined' && navigator.userAgent.toUpperCase().indexOf('MAC') >= 0
   const keyHint = isMac ? '⌘+Enter' : 'Ctrl+Enter'
 
+  const handleSaveFullChat = () => {
+    if (!notebookId) {
+      toast.error(t('sources.cannotSaveNoteNoNotebook'))
+      return
+    }
+
+    if (messages.length === 0) {
+      toast.error(t('chat.createToStart'))
+      return
+    }
+
+    const chatTranscript = messages
+      .map((message, index) => {
+        const speaker = message.type === 'human' ? t('common.human') : t('common.aiGenerated')
+        return `### ${speaker} ${index + 1}\n\n${message.content}`
+      })
+      .join('\n\n---\n\n')
+
+    createNote.mutate({
+      title: `${t('common.chat')} - ${new Date().toLocaleString()}`,
+      content: chatTranscript,
+      note_type: 'ai',
+      notebook_id: notebookId,
+    })
+  }
+
   return (
     <>
     <Card className="flex flex-col h-full flex-1 overflow-hidden">
@@ -132,35 +160,53 @@ export function ChatPanel({
             <Bot className="h-5 w-5" />
             {title || (contextType === 'source' ? t('chat.chatWith').replace('{name}', t('navigation.sources')) : t('chat.chatWith').replace('{name}', t('common.notebook')))}
           </CardTitle>
-          {onSelectSession && onCreateSession && onDeleteSession && (
-            <Dialog open={sessionManagerOpen} onOpenChange={setSessionManagerOpen}>
+          <div className="flex items-center gap-2">
+            {notebookId && (
               <Button
                 variant="ghost"
                 size="sm"
                 className="gap-2"
-                onClick={() => setSessionManagerOpen(true)}
-                disabled={loadingSessions}
+                onClick={handleSaveFullChat}
+                disabled={createNote.isPending || isStreaming || messages.length === 0}
               >
-                <Clock className="h-4 w-4" />
-                <span className="text-xs">{t('chat.sessions')}</span>
+                {createNote.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                <span className="text-xs">{`${t('common.save')} ${t('common.chat')}`}</span>
               </Button>
-              <DialogContent className="sm:max-w-[420px] p-0 overflow-hidden">
-                <DialogTitle className="sr-only">{t('chat.sessionsTitle')}</DialogTitle>
-                <SessionManager
-                  sessions={sessions}
-                  currentSessionId={currentSessionId ?? null}
-                  onCreateSession={(title) => onCreateSession?.(title)}
-                  onSelectSession={(sessionId) => {
-                    onSelectSession(sessionId)
-                    setSessionManagerOpen(false)
-                  }}
-                  onUpdateSession={(sessionId, title) => onUpdateSession?.(sessionId, title)}
-                  onDeleteSession={(sessionId) => onDeleteSession?.(sessionId)}
-                  loadingSessions={loadingSessions}
-                />
-              </DialogContent>
-            </Dialog>
-          )}
+            )}
+            {onSelectSession && onCreateSession && onDeleteSession && (
+              <Dialog open={sessionManagerOpen} onOpenChange={setSessionManagerOpen}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setSessionManagerOpen(true)}
+                  disabled={loadingSessions}
+                >
+                  <Clock className="h-4 w-4" />
+                  <span className="text-xs">{t('chat.sessions')}</span>
+                </Button>
+                <DialogContent className="sm:max-w-[420px] p-0 overflow-hidden">
+                  <DialogTitle className="sr-only">{t('chat.sessionsTitle')}</DialogTitle>
+                  <SessionManager
+                    sessions={sessions}
+                    currentSessionId={currentSessionId ?? null}
+                    onCreateSession={(title) => onCreateSession?.(title)}
+                    onSelectSession={(sessionId) => {
+                      onSelectSession(sessionId)
+                      setSessionManagerOpen(false)
+                    }}
+                    onUpdateSession={(sessionId, title) => onUpdateSession?.(sessionId, title)}
+                    onDeleteSession={(sessionId) => onDeleteSession?.(sessionId)}
+                    loadingSessions={loadingSessions}
+                  />
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col min-h-0 p-0">
