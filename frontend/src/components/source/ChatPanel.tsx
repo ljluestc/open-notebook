@@ -136,15 +136,18 @@ export function ChatPanel({
       return
     }
 
-    const chatTranscript = messages
+    const currentSessionTitle = sessions.find((session) => session.id === currentSessionId)?.title
+    const chatTitle = currentSessionTitle || title || t('common.chat')
+    const chatTranscriptBody = messages
       .map((message, index) => {
         const speaker = message.type === 'human' ? t('common.human') : t('common.aiGenerated')
         return `### ${speaker} ${index + 1}\n\n${message.content}`
       })
       .join('\n\n---\n\n')
+    const chatTranscript = `# ${chatTitle}\n\n${chatTranscriptBody}`
 
     createNote.mutate({
-      title: `${t('common.chat')} - ${new Date().toLocaleString()}`,
+      title: `${t('common.chat')}: ${chatTitle}`,
       content: chatTranscript,
       note_type: 'ai',
       notebook_id: notebookId,
